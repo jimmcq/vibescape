@@ -173,6 +173,8 @@
                 this.dataArray = null;
                 this.terrain = null;
                 this.particles = null;
+                this.particleSystem = null;
+                this.sparkles = null;
                 
                 // Audio analysis data
                 this.bassLevel = 0;
@@ -191,6 +193,7 @@
                 console.log('🎵 Initializing VibeScape...');
                 this.setupThreeJS();
                 this.createBasicScene();
+                this.createParticleSystem();
                 this.animate();
             }
 
@@ -254,6 +257,73 @@
                 this.scene.add(this.terrain);
 
                 console.log('🏞 Basic landscape created');
+            }
+
+            createParticleSystem() {
+                // Create floating orbs for mid-range frequencies
+                const orbCount = 150;
+                const orbGeometry = new THREE.SphereGeometry(0.8, 8, 8);
+                const orbMaterial = new THREE.MeshPhongMaterial({ 
+                    color: 0x4ecdc4,
+                    transparent: true,
+                    opacity: 0.7,
+                    emissive: 0x112233
+                });
+
+                this.particles = new THREE.Group();
+                
+                for (let i = 0; i < orbCount; i++) {
+                    const orb = new THREE.Mesh(orbGeometry, orbMaterial.clone());
+                    
+                    // Random starting positions
+                    orb.position.x = (Math.random() - 0.5) * 400;
+                    orb.position.y = Math.random() * 100 + 20;
+                    orb.position.z = (Math.random() - 0.5) * 400;
+                    
+                    // Store original position for movement reference
+                    orb.userData.originalX = orb.position.x;
+                    orb.userData.originalY = orb.position.y;
+                    orb.userData.originalZ = orb.position.z;
+                    orb.userData.phase = Math.random() * Math.PI * 2;
+                    orb.userData.speed = 0.5 + Math.random() * 1.5;
+                    
+                    this.particles.add(orb);
+                }
+                
+                this.scene.add(this.particles);
+
+                // Create sparkle system for high frequencies
+                const sparkleCount = 300;
+                const sparklePositions = new Float32Array(sparkleCount * 3);
+                const sparkleColors = new Float32Array(sparkleCount * 3);
+                
+                for (let i = 0; i < sparkleCount; i++) {
+                    const i3 = i * 3;
+                    sparklePositions[i3] = (Math.random() - 0.5) * 600;
+                    sparklePositions[i3 + 1] = Math.random() * 150 + 30;
+                    sparklePositions[i3 + 2] = (Math.random() - 0.5) * 600;
+                    
+                    sparkleColors[i3] = 1;
+                    sparkleColors[i3 + 1] = 1;
+                    sparkleColors[i3 + 2] = 1;
+                }
+
+                const sparkleGeometry = new THREE.BufferGeometry();
+                sparkleGeometry.setAttribute('position', new THREE.BufferAttribute(sparklePositions, 3));
+                sparkleGeometry.setAttribute('color', new THREE.BufferAttribute(sparkleColors, 3));
+
+                const sparkleMaterial = new THREE.PointsMaterial({
+                    size: 3,
+                    vertexColors: true,
+                    transparent: true,
+                    opacity: 0.8,
+                    sizeAttenuation: true
+                });
+
+                this.sparkles = new THREE.Points(sparkleGeometry, sparkleMaterial);
+                this.scene.add(this.sparkles);
+
+                console.log('✨ Particle systems created');
             }
 
             async setupAudio() {
@@ -377,12 +447,67 @@
                 this.camera.lookAt(0, this.midLevel * 10, 0);
             }
 
+            updateParticles() {
+                if (!this.particles || !this.sparkles) return;
+
+                const time = Date.now() * 0.001;
+
+                // Update floating orbs based on mid frequencies
+                this.particles.children.forEach((orb, index) => {
+                    const userData = orb.userData;
+                    
+                    // Gentle floating motion with audio response
+                    orb.position.x = userData.originalX + Math.sin(time * userData.speed + userData.phase) * (10 + this.midLevel * 20);
+                    orb.position.y = userData.originalY + Math.cos(time * userData.speed * 0.7) * (5 + this.midLevel * 15);
+                    orb.position.z = userData.originalZ + Math.sin(time * userData.speed * 0.5 + userData.phase) * (8 + this.midLevel * 12);
+                    
+                    // Pulse scale with mid frequencies
+                    const scale = 1 + this.midLevel * 0.5;
+                    orb.scale.setScalar(scale);
+                    
+                    // Update color based on audio
+                    const hue = (this.midLevel * 0.3 + time * 0.1 + index * 0.02) % 1;
+                    orb.material.color.setHSL(hue, 0.8, 0.6);
+                    orb.material.emissive.setHSL(hue, 0.5, 0.1 + this.midLevel * 0.2);
+                    
+                    // Opacity responds to overall level
+                    orb.material.opacity = 0.4 + this.overallLevel * 0.6;
+                });
+
+                // Update sparkles based on high frequencies
+                const sparklePositions = this.sparkles.geometry.attributes.position.array;
+                const sparkleColors = this.sparkles.geometry.attributes.color.array;
+                
+                for (let i = 0; i < sparklePositions.length; i += 3) {
+                    // Gentle movement
+                    sparklePositions[i + 1] += Math.sin(time + i * 0.01) * 0.1;
+                    
+                    // Color and brightness based on high frequencies
+                    const colorIndex = i;
+                    const brightness = 0.3 + this.highLevel * 0.7;
+                    const hue = (this.highLevel * 0.5 + time * 0.2 + i * 0.001) % 1;
+                    
+                    const color = new THREE.Color().setHSL(hue, 0.9, brightness);
+                    sparkleColors[colorIndex] = color.r;
+                    sparkleColors[colorIndex + 1] = color.g;
+                    sparkleColors[colorIndex + 2] = color.b;
+                }
+                
+                this.sparkles.geometry.attributes.position.needsUpdate = true;
+                this.sparkles.geometry.attributes.color.needsUpdate = true;
+                
+                // Sparkle size responds to high frequencies
+                this.sparkles.material.size = 2 + this.highLevel * 4;
+                this.sparkles.material.opacity = 0.4 + this.highLevel * 0.6;
+            }
+
             animate() {
                 this.animationId = requestAnimationFrame(() => this.animate());
 
                 if (this.isPlaying) {
                     this.processAudioData();
                     this.updateTerrain();
+                    this.updateParticles();
                     this.updateCamera();
                 }
 
