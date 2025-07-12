@@ -109,6 +109,46 @@
             text-decoration: underline;
         }
 
+        #fileUpload {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        #fileLabel {
+            display: inline-block;
+            background: linear-gradient(45deg, #4ecdc4, #45b7d1);
+            color: white;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.3s ease;
+        }
+
+        #fileLabel:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        #fileName {
+            display: block;
+            margin-top: 5px;
+            font-size: 0.8em;
+            opacity: 0.7;
+            color: #4ecdc4;
+        }
+
+        #audioSource {
+            margin-top: 5px;
+            font-size: 0.8em;
+            opacity: 0.8;
+        }
+
         @keyframes gradientShift {
             0% { background-position: 0% 50%; }
             50% { background-position: 100% 50%; }
@@ -141,6 +181,13 @@
             <div id="audioInfo">
                 <div>Status: <span id="status">Ready to vibe</span></div>
                 <div>Audio Level: <span id="level">0</span></div>
+                <div id="audioSource">Source: <span id="currentSource">Microphone</span></div>
+            </div>
+            
+            <div id="fileUpload">
+                <input type="file" id="fileInput" accept="audio/*">
+                <label for="fileInput" id="fileLabel">🎵 Upload Music File</label>
+                <span id="fileName"></span>
             </div>
             
             <div id="githubLink">
@@ -170,7 +217,10 @@
                 this.audioContext = null;
                 this.analyser = null;
                 this.microphone = null;
+                this.audioElement = null;
+                this.audioSource = null;
                 this.dataArray = null;
+                this.currentAudioSource = 'microphone';
                 this.terrain = null;
                 this.particles = null;
                 this.particleSystem = null;
@@ -379,15 +429,6 @@
 
             async setupAudio() {
                 try {
-                    // Get microphone access
-                    const stream = await navigator.mediaDevices.getUserMedia({ 
-                        audio: {
-                            echoCancellation: false,
-                            noiseSuppression: false,
-                            autoGainControl: false
-                        } 
-                    });
-
                     // Create audio context
                     this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
                     
@@ -396,20 +437,44 @@
                     this.analyser.fftSize = 512; // Good balance of detail and performance
                     this.analyser.smoothingTimeConstant = 0.8;
 
-                    // Connect microphone to analyser
-                    this.microphone = this.audioContext.createMediaStreamSource(stream);
-                    this.microphone.connect(this.analyser);
+                    if (this.currentAudioSource === 'microphone') {
+                        // Setup microphone input
+                        const stream = await navigator.mediaDevices.getUserMedia({ 
+                            audio: {
+                                echoCancellation: false,
+                                noiseSuppression: false,
+                                autoGainControl: false
+                            } 
+                        });
+
+                        this.microphone = this.audioContext.createMediaStreamSource(stream);
+                        this.microphone.connect(this.analyser);
+                        this.updateStatus('🎤 Listening to microphone - make some noise!');
+
+                    } else if (this.currentAudioSource === 'file' && this.audioElement) {
+                        // Setup file input
+                        this.audioSource = this.audioContext.createMediaElementSource(this.audioElement);
+                        this.audioSource.connect(this.analyser);
+                        this.audioSource.connect(this.audioContext.destination); // Also connect to speakers
+                        
+                        // Start playing the audio file
+                        await this.audioElement.play();
+                        this.updateStatus('🎵 Playing audio file - watch the music come alive!');
+                    }
 
                     // Create data array for frequency data
                     this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
 
-                    console.log('🎤 Audio system initialized');
-                    this.updateStatus('Audio connected - listening to your vibes');
+                    console.log(`🎵 Audio system initialized with ${this.currentAudioSource}`);
                     return true;
 
                 } catch (error) {
                     console.error('❌ Audio setup failed:', error);
-                    this.updateStatus('Audio access denied - try refreshing and allowing microphone');
+                    if (this.currentAudioSource === 'microphone') {
+                        this.updateStatus('Microphone access denied - try uploading an audio file instead');
+                    } else {
+                        this.updateStatus('Audio file playback failed - try a different file');
+                    }
                     return false;
                 }
             }
@@ -607,13 +672,28 @@
             async start() {
                 if (this.isPlaying) return;
 
+                // If audio is already set up and we're just resuming
+                if (this.audioContext && this.currentAudioSource === 'file' && this.audioElement) {
+                    await this.audioElement.play();
+                    this.isPlaying = true;
+                    document.getElementById('startBtn').disabled = true;
+                    document.getElementById('pauseBtn').disabled = false;
+                    this.updateStatus('🎵 Resuming audio file playback');
+                    return;
+                }
+
                 const audioInitialized = await this.setupAudio();
                 if (!audioInitialized) return;
 
                 this.isPlaying = true;
                 document.getElementById('startBtn').disabled = true;
                 document.getElementById('pauseBtn').disabled = false;
-                this.updateStatus('🎵 Vibing with your audio');
+                
+                if (this.currentAudioSource === 'microphone') {
+                    this.updateStatus('🎤 Vibing with microphone input');
+                } else {
+                    this.updateStatus('🎵 Vibing with audio file');
+                }
 
                 console.log('🚀 VibeScape started');
             }
@@ -622,8 +702,13 @@
                 this.isPlaying = false;
                 document.getElementById('startBtn').disabled = false;
                 document.getElementById('pauseBtn').disabled = true;
+                
+                // Pause audio file if playing
+                if (this.currentAudioSource === 'file' && this.audioElement) {
+                    this.audioElement.pause();
+                }
+                
                 this.updateStatus('⏸ Paused - ready to resume');
-
                 console.log('⏸ VibeScape paused');
             }
 
@@ -634,6 +719,41 @@
             setupEventListeners() {
                 document.getElementById('startBtn').addEventListener('click', () => this.start());
                 document.getElementById('pauseBtn').addEventListener('click', () => this.pause());
+                document.getElementById('fileInput').addEventListener('change', (e) => this.handleFileUpload(e));
+            }
+
+            handleFileUpload(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                console.log(`🎵 Loading audio file: ${file.name}`);
+                document.getElementById('fileName').textContent = file.name;
+                document.getElementById('currentSource').textContent = 'Audio File';
+                
+                this.currentAudioSource = 'file';
+                this.loadAudioFile(file);
+            }
+
+            async loadAudioFile(file) {
+                try {
+                    // Create audio element if it doesn't exist
+                    if (!this.audioElement) {
+                        this.audioElement = new Audio();
+                        this.audioElement.loop = true;
+                        this.audioElement.volume = 0.7;
+                    }
+
+                    // Load the file
+                    const url = URL.createObjectURL(file);
+                    this.audioElement.src = url;
+                    
+                    this.updateStatus(`Audio file loaded: ${file.name}`);
+                    console.log('🎵 Audio file ready for playback');
+
+                } catch (error) {
+                    console.error('❌ Error loading audio file:', error);
+                    this.updateStatus('Error loading audio file');
+                }
             }
         }
 
