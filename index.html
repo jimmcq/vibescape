@@ -149,6 +149,78 @@
             opacity: 0.8;
         }
 
+        #sampleTracks {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .sample-btn {
+            display: block;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            border: none;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 3px 0;
+            font-size: 0.8em;
+            transition: all 0.3s ease;
+            width: 100%;
+            text-align: left;
+        }
+
+        .sample-btn:hover {
+            transform: translateX(3px);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .sample-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        #sampleLabel {
+            font-size: 0.9em;
+            margin-bottom: 5px;
+            opacity: 0.9;
+        }
+
+        #cameraControls {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .camera-btn {
+            background: linear-gradient(45deg, #45b7d1, #96ceb4);
+            border: none;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 2px;
+            font-size: 0.8em;
+            transition: all 0.3s ease;
+        }
+
+        .camera-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .camera-btn.active {
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            box-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
+        }
+
+        #cameraLabel {
+            font-size: 0.9em;
+            margin-bottom: 5px;
+            opacity: 0.9;
+        }
+
         @keyframes gradientShift {
             0% { background-position: 0% 50%; }
             50% { background-position: 100% 50%; }
@@ -190,6 +262,22 @@
                 <span id="fileName"></span>
             </div>
             
+            <div id="sampleTracks">
+                <div id="sampleLabel">🎶 Try Sample Tracks:</div>
+                <button class="sample-btn" data-track="ambient">🌙 Ambient Synthwave</button>
+                <button class="sample-btn" data-track="electronic">⚡ Electronic Dance</button>
+                <button class="sample-btn" data-track="piano">🎹 Piano Melody</button>
+                <button class="sample-btn" data-track="drums">🥁 Drum Patterns</button>
+            </div>
+            
+            <div id="cameraControls">
+                <div id="cameraLabel">📹 Camera Mode:</div>
+                <button class="camera-btn active" data-mode="auto">🌊 Auto Flow</button>
+                <button class="camera-btn" data-mode="orbit">🔄 Orbit</button>
+                <button class="camera-btn" data-mode="fly">✈️ Fly Through</button>
+                <button class="camera-btn" data-mode="static">📍 Static</button>
+            </div>
+            
             <div id="githubLink">
                 <a href="https://github.com/jimmcq/vibescape" target="_blank">
                     📁 View Source & Vibe Coding Process
@@ -221,6 +309,11 @@
                 this.audioSource = null;
                 this.dataArray = null;
                 this.currentAudioSource = 'microphone';
+                this.synth = null;
+                this.synthGain = null;
+                this.synthPlaying = false;
+                this.cameraMode = 'auto';
+                this.cameraTime = 0;
                 this.terrain = null;
                 this.particles = null;
                 this.particleSystem = null;
@@ -460,6 +553,12 @@
                         // Start playing the audio file
                         await this.audioElement.play();
                         this.updateStatus('🎵 Playing audio file - watch the music come alive!');
+
+                    } else if (this.currentAudioSource === 'synth') {
+                        // Setup synthesized audio
+                        this.createSynthesizer();
+                        this.generateSynthAudio();
+                        this.updateStatus(`🎶 Playing ${this.currentTrackType} sample - watch the generated music!`);
                     }
 
                     // Create data array for frequency data
@@ -553,14 +652,67 @@
             updateCamera() {
                 if (!this.camera) return;
 
-                // Gentle camera movement based on audio
-                const time = Date.now() * 0.0005;
-                
+                this.cameraTime += 0.016; // Roughly 60fps
+                const audioTime = Date.now() * 0.0005;
+
+                switch(this.cameraMode) {
+                    case 'auto':
+                        this.updateAutoCamera(audioTime);
+                        break;
+                    case 'orbit':
+                        this.updateOrbitCamera(audioTime);
+                        break;
+                    case 'fly':
+                        this.updateFlyCamera(audioTime);
+                        break;
+                    case 'static':
+                        this.updateStaticCamera();
+                        break;
+                }
+            }
+
+            updateAutoCamera(time) {
+                // Original gentle movement with audio response
                 this.camera.position.x = Math.sin(time + this.bassLevel * 2) * 30;
                 this.camera.position.y = 50 + this.overallLevel * 20;
                 this.camera.position.z = 100 + Math.cos(time) * 20;
-                
                 this.camera.lookAt(0, this.midLevel * 10, 0);
+            }
+
+            updateOrbitCamera(time) {
+                // Circular orbit around the terrain
+                const radius = 120 + this.overallLevel * 30;
+                const height = 40 + this.bassLevel * 30;
+                const speed = 0.3 + this.midLevel * 0.5;
+                
+                this.camera.position.x = Math.cos(time * speed) * radius;
+                this.camera.position.z = Math.sin(time * speed) * radius;
+                this.camera.position.y = height;
+                
+                this.camera.lookAt(0, this.midLevel * 15, 0);
+            }
+
+            updateFlyCamera(time) {
+                // Flying through the landscape
+                const speed = 0.4 + this.overallLevel * 0.6;
+                const amplitude = 40 + this.bassLevel * 20;
+                
+                this.camera.position.x = Math.sin(time * speed) * amplitude;
+                this.camera.position.y = 30 + Math.cos(time * speed * 0.7) * 20 + this.midLevel * 25;
+                this.camera.position.z = time * 15 % 400 - 200; // Move forward continuously
+                
+                // Look ahead in the direction of movement
+                const lookX = Math.sin(time * speed + 0.5) * amplitude * 0.5;
+                const lookY = this.camera.position.y + this.highLevel * 10;
+                const lookZ = this.camera.position.z + 50;
+                
+                this.camera.lookAt(lookX, lookY, lookZ);
+            }
+
+            updateStaticCamera() {
+                // Keep camera in a fixed, pleasant position
+                this.camera.position.set(0, 60, 120);
+                this.camera.lookAt(0, 0, 0);
             }
 
             updateParticles() {
@@ -680,6 +832,13 @@
                     document.getElementById('pauseBtn').disabled = false;
                     this.updateStatus('🎵 Resuming audio file playback');
                     return;
+                } else if (this.audioContext && this.currentAudioSource === 'synth' && !this.synthPlaying) {
+                    this.generateSynthAudio();
+                    this.isPlaying = true;
+                    document.getElementById('startBtn').disabled = true;
+                    document.getElementById('pauseBtn').disabled = false;
+                    this.updateStatus(`🎶 Resuming ${this.currentTrackType} sample`);
+                    return;
                 }
 
                 const audioInitialized = await this.setupAudio();
@@ -691,8 +850,10 @@
                 
                 if (this.currentAudioSource === 'microphone') {
                     this.updateStatus('🎤 Vibing with microphone input');
-                } else {
+                } else if (this.currentAudioSource === 'file') {
                     this.updateStatus('🎵 Vibing with audio file');
+                } else if (this.currentAudioSource === 'synth') {
+                    this.updateStatus(`🎶 Vibing with ${this.currentTrackType} sample`);
                 }
 
                 console.log('🚀 VibeScape started');
@@ -706,6 +867,8 @@
                 // Pause audio file if playing
                 if (this.currentAudioSource === 'file' && this.audioElement) {
                     this.audioElement.pause();
+                } else if (this.currentAudioSource === 'synth') {
+                    this.stopSynth();
                 }
                 
                 this.updateStatus('⏸ Paused - ready to resume');
@@ -720,6 +883,16 @@
                 document.getElementById('startBtn').addEventListener('click', () => this.start());
                 document.getElementById('pauseBtn').addEventListener('click', () => this.pause());
                 document.getElementById('fileInput').addEventListener('change', (e) => this.handleFileUpload(e));
+                
+                // Sample track buttons
+                document.querySelectorAll('.sample-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => this.loadSampleTrack(e.target.dataset.track));
+                });
+
+                // Camera control buttons
+                document.querySelectorAll('.camera-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => this.setCameraMode(e.target.dataset.mode, e.target));
+                });
             }
 
             handleFileUpload(event) {
@@ -754,6 +927,253 @@
                     console.error('❌ Error loading audio file:', error);
                     this.updateStatus('Error loading audio file');
                 }
+            }
+
+            loadSampleTrack(trackType) {
+                console.log(`🎵 Loading sample track: ${trackType}`);
+                this.currentAudioSource = 'synth';
+                this.currentTrackType = trackType;
+                
+                document.getElementById('currentSource').textContent = `Sample: ${trackType}`;
+                document.getElementById('fileName').textContent = `Generated ${trackType} track`;
+                
+                this.updateStatus(`Loaded ${trackType} sample - ready to vibe!`);
+            }
+
+            setCameraMode(mode, buttonElement) {
+                this.cameraMode = mode;
+                this.cameraTime = 0; // Reset camera time for new mode
+                
+                // Update button styles
+                document.querySelectorAll('.camera-btn').forEach(btn => btn.classList.remove('active'));
+                buttonElement.classList.add('active');
+                
+                console.log(`📹 Camera mode set to: ${mode}`);
+            }
+
+            createSynthesizer() {
+                if (!this.audioContext) return;
+
+                // Create gain node for volume control
+                this.synthGain = this.audioContext.createGain();
+                this.synthGain.gain.value = 0.3;
+                this.synthGain.connect(this.analyser);
+                this.synthGain.connect(this.audioContext.destination);
+
+                // Create oscillator nodes for different track types
+                this.synth = {
+                    oscillators: [],
+                    startTime: this.audioContext.currentTime
+                };
+            }
+
+            generateSynthAudio() {
+                if (!this.audioContext || !this.synthGain || !this.currentTrackType) return;
+
+                // Clear existing oscillators
+                this.synth.oscillators.forEach(osc => {
+                    try { osc.stop(); } catch(e) {}
+                });
+                this.synth.oscillators = [];
+
+                const time = this.audioContext.currentTime;
+                
+                switch(this.currentTrackType) {
+                    case 'ambient':
+                        this.createAmbientTrack(time);
+                        break;
+                    case 'electronic':
+                        this.createElectronicTrack(time);
+                        break;
+                    case 'piano':
+                        this.createPianoTrack(time);
+                        break;
+                    case 'drums':
+                        this.createDrumTrack(time);
+                        break;
+                }
+
+                this.synthPlaying = true;
+            }
+
+            createAmbientTrack(startTime) {
+                // Low bass drone
+                const bass = this.audioContext.createOscillator();
+                bass.type = 'sine';
+                bass.frequency.setValueAtTime(40, startTime);
+                bass.frequency.exponentialRampToValueAtTime(60, startTime + 8);
+                bass.frequency.exponentialRampToValueAtTime(30, startTime + 16);
+                
+                const bassGain = this.audioContext.createGain();
+                bassGain.gain.setValueAtTime(0.1, startTime);
+                bassGain.gain.linearRampToValueAtTime(0.3, startTime + 2);
+                
+                bass.connect(bassGain);
+                bassGain.connect(this.synthGain);
+                bass.start(startTime);
+                
+                // Atmospheric pads
+                for (let i = 0; i < 3; i++) {
+                    const pad = this.audioContext.createOscillator();
+                    pad.type = 'triangle';
+                    pad.frequency.setValueAtTime(220 + i * 110, startTime);
+                    
+                    const padGain = this.audioContext.createGain();
+                    padGain.gain.setValueAtTime(0, startTime + i);
+                    padGain.gain.linearRampToValueAtTime(0.1, startTime + i + 3);
+                    padGain.gain.linearRampToValueAtTime(0.05, startTime + i + 8);
+                    
+                    pad.connect(padGain);
+                    padGain.connect(this.synthGain);
+                    pad.start(startTime);
+                    
+                    this.synth.oscillators.push(pad);
+                }
+                
+                this.synth.oscillators.push(bass);
+            }
+
+            createElectronicTrack(startTime) {
+                // Kick drum pattern
+                for (let beat = 0; beat < 16; beat++) {
+                    const kickTime = startTime + beat * 0.5;
+                    const kick = this.audioContext.createOscillator();
+                    kick.type = 'sine';
+                    kick.frequency.setValueAtTime(60, kickTime);
+                    kick.frequency.exponentialRampToValueAtTime(30, kickTime + 0.1);
+                    
+                    const kickGain = this.audioContext.createGain();
+                    kickGain.gain.setValueAtTime(0.8, kickTime);
+                    kickGain.gain.exponentialRampToValueAtTime(0.01, kickTime + 0.2);
+                    
+                    kick.connect(kickGain);
+                    kickGain.connect(this.synthGain);
+                    kick.start(kickTime);
+                    kick.stop(kickTime + 0.2);
+                }
+                
+                // Synth lead
+                const lead = this.audioContext.createOscillator();
+                lead.type = 'sawtooth';
+                lead.frequency.setValueAtTime(440, startTime);
+                lead.frequency.setValueAtTime(523, startTime + 2);
+                lead.frequency.setValueAtTime(659, startTime + 4);
+                lead.frequency.setValueAtTime(440, startTime + 6);
+                
+                const leadGain = this.audioContext.createGain();
+                leadGain.gain.setValueAtTime(0.2, startTime);
+                
+                lead.connect(leadGain);
+                leadGain.connect(this.synthGain);
+                lead.start(startTime);
+                
+                this.synth.oscillators.push(lead);
+            }
+
+            createPianoTrack(startTime) {
+                // Piano-like attack with multiple harmonics
+                const notes = [261.63, 293.66, 329.63, 349.23, 392.00]; // C, D, E, F, G
+                
+                notes.forEach((freq, i) => {
+                    const noteTime = startTime + i * 1.5;
+                    
+                    // Fundamental
+                    const fundamental = this.audioContext.createOscillator();
+                    fundamental.type = 'triangle';
+                    fundamental.frequency.setValueAtTime(freq, noteTime);
+                    
+                    // Harmonic
+                    const harmonic = this.audioContext.createOscillator();
+                    harmonic.type = 'sine';
+                    harmonic.frequency.setValueAtTime(freq * 2, noteTime);
+                    
+                    const noteGain = this.audioContext.createGain();
+                    noteGain.gain.setValueAtTime(0.4, noteTime);
+                    noteGain.gain.exponentialRampToValueAtTime(0.01, noteTime + 1.2);
+                    
+                    const harmonicGain = this.audioContext.createGain();
+                    harmonicGain.gain.setValueAtTime(0.1, noteTime);
+                    harmonicGain.gain.exponentialRampToValueAtTime(0.01, noteTime + 0.8);
+                    
+                    fundamental.connect(noteGain);
+                    harmonic.connect(harmonicGain);
+                    noteGain.connect(this.synthGain);
+                    harmonicGain.connect(this.synthGain);
+                    
+                    fundamental.start(noteTime);
+                    harmonic.start(noteTime);
+                    fundamental.stop(noteTime + 1.5);
+                    harmonic.stop(noteTime + 1.0);
+                });
+            }
+
+            createDrumTrack(startTime) {
+                // Complex drum pattern with different elements
+                for (let bar = 0; bar < 4; bar++) {
+                    const barTime = startTime + bar * 2;
+                    
+                    // Kick on 1 and 3
+                    [0, 1].forEach(beat => {
+                        const kickTime = barTime + beat;
+                        const kick = this.audioContext.createOscillator();
+                        kick.type = 'sine';
+                        kick.frequency.setValueAtTime(80, kickTime);
+                        kick.frequency.exponentialRampToValueAtTime(40, kickTime + 0.15);
+                        
+                        const kickGain = this.audioContext.createGain();
+                        kickGain.gain.setValueAtTime(0.9, kickTime);
+                        kickGain.gain.exponentialRampToValueAtTime(0.01, kickTime + 0.3);
+                        
+                        kick.connect(kickGain);
+                        kickGain.connect(this.synthGain);
+                        kick.start(kickTime);
+                        kick.stop(kickTime + 0.3);
+                    });
+                    
+                    // Snare on 2 and 4
+                    [0.5, 1.5].forEach(beat => {
+                        const snareTime = barTime + beat;
+                        const snare = this.audioContext.createOscillator();
+                        snare.type = 'square';
+                        snare.frequency.setValueAtTime(200, snareTime);
+                        
+                        const snareGain = this.audioContext.createGain();
+                        snareGain.gain.setValueAtTime(0.4, snareTime);
+                        snareGain.gain.exponentialRampToValueAtTime(0.01, snareTime + 0.1);
+                        
+                        snare.connect(snareGain);
+                        snareGain.connect(this.synthGain);
+                        snare.start(snareTime);
+                        snare.stop(snareTime + 0.1);
+                    });
+                    
+                    // Hi-hats
+                    for (let eighth = 0; eighth < 8; eighth++) {
+                        const hihatTime = barTime + eighth * 0.25;
+                        const hihat = this.audioContext.createOscillator();
+                        hihat.type = 'square';
+                        hihat.frequency.setValueAtTime(8000, hihatTime);
+                        
+                        const hihatGain = this.audioContext.createGain();
+                        hihatGain.gain.setValueAtTime(0.1, hihatTime);
+                        hihatGain.gain.exponentialRampToValueAtTime(0.01, hihatTime + 0.05);
+                        
+                        hihat.connect(hihatGain);
+                        hihatGain.connect(this.synthGain);
+                        hihat.start(hihatTime);
+                        hihat.stop(hihatTime + 0.05);
+                    }
+                }
+            }
+
+            stopSynth() {
+                if (this.synth && this.synth.oscillators) {
+                    this.synth.oscillators.forEach(osc => {
+                        try { osc.stop(); } catch(e) {}
+                    });
+                    this.synth.oscillators = [];
+                }
+                this.synthPlaying = false;
             }
         }
 
