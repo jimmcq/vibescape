@@ -89,6 +89,26 @@
             opacity: 0.8;
         }
 
+        #githubLink {
+            margin-top: 15px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        #githubLink a {
+            color: #4ecdc4;
+            text-decoration: none;
+            font-size: 0.9em;
+            opacity: 0.8;
+            transition: all 0.3s ease;
+        }
+
+        #githubLink a:hover {
+            opacity: 1;
+            color: #96ceb4;
+            text-decoration: underline;
+        }
+
         @keyframes gradientShift {
             0% { background-position: 0% 50%; }
             50% { background-position: 100% 50%; }
@@ -121,6 +141,12 @@
             <div id="audioInfo">
                 <div>Status: <span id="status">Ready to vibe</span></div>
                 <div>Audio Level: <span id="level">0</span></div>
+            </div>
+            
+            <div id="githubLink">
+                <a href="https://github.com/jimmcq/vibescape" target="_blank">
+                    📁 View Source & Vibe Coding Process
+                </a>
             </div>
         </div>
 
