@@ -221,6 +221,48 @@
             opacity: 0.9;
         }
 
+        #fullscreenBtn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 200;
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 10px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 1.2em;
+            transition: all 0.3s ease;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #fullscreenBtn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: scale(1.1);
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+        }
+
+        .fullscreen-controls {
+            display: none;
+        }
+
+        body.fullscreen .fullscreen-controls {
+            display: block;
+        }
+
+        body.fullscreen #title {
+            display: none;
+        }
+
+        body.fullscreen #instructions {
+            display: none;
+        }
+
         @keyframes gradientShift {
             0% { background-position: 0% 50%; }
             50% { background-position: 100% 50%; }
@@ -241,6 +283,8 @@
 <body>
     <div id="container">
         <canvas id="canvas"></canvas>
+        
+        <button id="fullscreenBtn" title="Toggle Fullscreen">⛶</button>
         
         <div id="title">
             <h1>VibeScape</h1>
@@ -286,7 +330,8 @@
         </div>
 
         <div id="instructions">
-            Click "Start Audio Experience" and allow microphone access to begin your journey through living music
+            Click "Start Audio Experience" and allow microphone access to begin your journey through living music<br>
+            <small>Press 'F' or click ⛶ for fullscreen • Try different camera modes • Upload your own music</small>
         </div>
     </div>
 
@@ -314,6 +359,7 @@
                 this.synthPlaying = false;
                 this.cameraMode = 'auto';
                 this.cameraTime = 0;
+                this.isFullscreen = false;
                 this.terrain = null;
                 this.particles = null;
                 this.particleSystem = null;
@@ -893,6 +939,22 @@
                 document.querySelectorAll('.camera-btn').forEach(btn => {
                     btn.addEventListener('click', (e) => this.setCameraMode(e.target.dataset.mode, e.target));
                 });
+
+                // Fullscreen button
+                document.getElementById('fullscreenBtn').addEventListener('click', () => this.toggleFullscreen());
+                
+                // Listen for fullscreen changes
+                document.addEventListener('fullscreenchange', () => this.handleFullscreenChange());
+                document.addEventListener('webkitfullscreenchange', () => this.handleFullscreenChange());
+                document.addEventListener('mozfullscreenchange', () => this.handleFullscreenChange());
+                document.addEventListener('MSFullscreenChange', () => this.handleFullscreenChange());
+
+                // Keyboard shortcuts
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'f' || e.key === 'F') {
+                        this.toggleFullscreen();
+                    }
+                });
             }
 
             handleFileUpload(event) {
@@ -949,6 +1011,62 @@
                 buttonElement.classList.add('active');
                 
                 console.log(`📹 Camera mode set to: ${mode}`);
+            }
+
+            toggleFullscreen() {
+                if (!this.isFullscreen) {
+                    this.enterFullscreen();
+                } else {
+                    this.exitFullscreen();
+                }
+            }
+
+            enterFullscreen() {
+                const element = document.documentElement;
+                
+                if (element.requestFullscreen) {
+                    element.requestFullscreen();
+                } else if (element.webkitRequestFullscreen) {
+                    element.webkitRequestFullscreen();
+                } else if (element.mozRequestFullScreen) {
+                    element.mozRequestFullScreen();
+                } else if (element.msRequestFullscreen) {
+                    element.msRequestFullscreen();
+                }
+            }
+
+            exitFullscreen() {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.mozCancelFullScreen) {
+                    document.mozCancelFullScreen();
+                } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                }
+            }
+
+            handleFullscreenChange() {
+                this.isFullscreen = !!(document.fullscreenElement || 
+                                      document.webkitFullscreenElement || 
+                                      document.mozFullScreenElement || 
+                                      document.msFullscreenElement);
+                
+                // Update UI
+                document.body.classList.toggle('fullscreen', this.isFullscreen);
+                const btn = document.getElementById('fullscreenBtn');
+                btn.textContent = this.isFullscreen ? '⛶' : '⛶';
+                btn.title = this.isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen';
+                
+                // Resize renderer for fullscreen
+                if (this.renderer) {
+                    this.renderer.setSize(window.innerWidth, window.innerHeight);
+                    this.camera.aspect = window.innerWidth / window.innerHeight;
+                    this.camera.updateProjectionMatrix();
+                }
+                
+                console.log(`🖼️ Fullscreen ${this.isFullscreen ? 'enabled' : 'disabled'}`);
             }
 
             createSynthesizer() {
