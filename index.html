@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VibeScape - Where Music Becomes Reality</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+            color: white;
+        }
+
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        #controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        #title {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 100;
+            text-align: right;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 2.5em;
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4, #45b7d1, #96ceb4);
+            background-size: 400% 400%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: gradientShift 3s ease infinite;
+        }
+
+        .subtitle {
+            margin: 5px 0 0 0;
+            opacity: 0.8;
+            font-style: italic;
+        }
+
+        button {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+            transition: all 0.3s ease;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        #audioInfo {
+            margin-top: 10px;
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            text-align: center;
+            opacity: 0.7;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="canvas"></canvas>
+        
+        <div id="title">
+            <h1>VibeScape</h1>
+            <div class="subtitle">Where Music Becomes Reality</div>
+        </div>
+
+        <div id="controls">
+            <button id="startBtn">🎵 Start Audio Experience</button>
+            <button id="pauseBtn" disabled>⏸ Pause</button>
+            <div id="audioInfo">
+                <div>Status: <span id="status">Ready to vibe</span></div>
+                <div>Audio Level: <span id="level">0</span></div>
+            </div>
+        </div>
+
+        <div id="instructions">
+            Click "Start Audio Experience" and allow microphone access to begin your journey through living music
+        </div>
+    </div>
+
+    <!-- Three.js from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        // VibeScape - Audio Reactive 3D Landscape
+        // Built with vibe coding methodology
+        
+        class VibeScape {
+            constructor() {
+                this.scene = null;
+                this.camera = null;
+                this.renderer = null;
+                this.audioContext = null;
+                this.analyser = null;
+                this.microphone = null;
+                this.dataArray = null;
+                this.terrain = null;
+                this.particles = null;
+                
+                // Audio analysis data
+                this.bassLevel = 0;
+                this.midLevel = 0;
+                this.highLevel = 0;
+                this.overallLevel = 0;
+                
+                this.isPlaying = false;
+                this.animationId = null;
+                
+                this.init();
+                this.setupEventListeners();
+            }
+
+            init() {
+                console.log('🎵 Initializing VibeScape...');
+                this.setupThreeJS();
+                this.createBasicScene();
+                this.animate();
+            }
+
+            setupThreeJS() {
+                // Scene setup
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(0x0a0a0f);
+
+                // Camera setup - start with a good vantage point
+                this.camera = new THREE.PerspectiveCamera(
+                    75, 
+                    window.innerWidth / window.innerHeight, 
+                    0.1, 
+                    1000
+                );
+                this.camera.position.set(0, 50, 100);
+                this.camera.lookAt(0, 0, 0);
+
+                // Renderer setup
+                const canvas = document.getElementById('canvas');
+                this.renderer = new THREE.WebGLRenderer({ 
+                    canvas: canvas, 
+                    antialias: true 
+                });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+                // Handle window resize
+                window.addEventListener('resize', () => {
+                    this.camera.aspect = window.innerWidth / window.innerHeight;
+                    this.camera.updateProjectionMatrix();
+                    this.renderer.setSize(window.innerWidth, window.innerHeight);
+                });
+
+                console.log('✨ Three.js scene initialized');
+            }
+
+            createBasicScene() {
+                // Basic lighting to start
+                const ambientLight = new THREE.AmbientLight(0x404040, 0.4);
+                this.scene.add(ambientLight);
+
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(50, 50, 50);
+                directionalLight.castShadow = true;
+                this.scene.add(directionalLight);
+
+                // Create a simple plane to start - we'll make it reactive soon
+                const geometry = new THREE.PlaneGeometry(200, 200, 50, 50);
+                const material = new THREE.MeshPhongMaterial({ 
+                    color: 0x4a90e2,
+                    wireframe: false,
+                    transparent: true,
+                    opacity: 0.8
+                });
+                
+                this.terrain = new THREE.Mesh(geometry, material);
+                this.terrain.rotation.x = -Math.PI / 2; // Make it horizontal
+                this.terrain.receiveShadow = true;
+                this.scene.add(this.terrain);
+
+                console.log('🏞 Basic landscape created');
+            }
+
+            async setupAudio() {
+                try {
+                    // Get microphone access
+                    const stream = await navigator.mediaDevices.getUserMedia({ 
+                        audio: {
+                            echoCancellation: false,
+                            noiseSuppression: false,
+                            autoGainControl: false
+                        } 
+                    });
+
+                    // Create audio context
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    
+                    // Create analyser
+                    this.analyser = this.audioContext.createAnalyser();
+                    this.analyser.fftSize = 512; // Good balance of detail and performance
+                    this.analyser.smoothingTimeConstant = 0.8;
+
+                    // Connect microphone to analyser
+                    this.microphone = this.audioContext.createMediaStreamSource(stream);
+                    this.microphone.connect(this.analyser);
+
+                    // Create data array for frequency data
+                    this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+
+                    console.log('🎤 Audio system initialized');
+                    this.updateStatus('Audio connected - listening to your vibes');
+                    return true;
+
+                } catch (error) {
+                    console.error('❌ Audio setup failed:', error);
+                    this.updateStatus('Audio access denied - try refreshing and allowing microphone');
+                    return false;
+                }
+            }
+
+            processAudioData() {
+                if (!this.analyser) return;
+
+                // Get frequency data
+                this.analyser.getByteFrequencyData(this.dataArray);
+
+                // Calculate frequency band levels
+                const bufferLength = this.dataArray.length;
+                
+                // Bass: 0-100Hz (roughly first 10% of spectrum)
+                const bassEnd = Math.floor(bufferLength * 0.1);
+                let bassSum = 0;
+                for (let i = 0; i < bassEnd; i++) {
+                    bassSum += this.dataArray[i];
+                }
+                this.bassLevel = bassSum / bassEnd / 255;
+
+                // Mids: 100Hz-2kHz (roughly 10%-60% of spectrum)
+                const midStart = bassEnd;
+                const midEnd = Math.floor(bufferLength * 0.6);
+                let midSum = 0;
+                for (let i = midStart; i < midEnd; i++) {
+                    midSum += this.dataArray[i];
+                }
+                this.midLevel = midSum / (midEnd - midStart) / 255;
+
+                // Highs: 2kHz+ (roughly 60%-100% of spectrum)
+                const highStart = midEnd;
+                let highSum = 0;
+                for (let i = highStart; i < bufferLength; i++) {
+                    highSum += this.dataArray[i];
+                }
+                this.highLevel = highSum / (bufferLength - highStart) / 255;
+
+                // Overall level
+                let totalSum = 0;
+                for (let i = 0; i < bufferLength; i++) {
+                    totalSum += this.dataArray[i];
+                }
+                this.overallLevel = totalSum / bufferLength / 255;
+
+                // Update UI
+                document.getElementById('level').textContent = Math.round(this.overallLevel * 100) + '%';
+            }
+
+            updateTerrain() {
+                if (!this.terrain) return;
+
+                const geometry = this.terrain.geometry;
+                const position = geometry.attributes.position;
+
+                // Make terrain breathe with bass
+                for (let i = 0; i < position.count; i++) {
+                    const x = position.getX(i);
+                    const y = position.getY(i);
+                    
+                    // Create waves based on bass level
+                    const distance = Math.sqrt(x * x + y * y);
+                    const wave = Math.sin(distance * 0.02 + Date.now() * 0.001) * this.bassLevel * 20;
+                    
+                    position.setZ(i, wave);
+                }
+                
+                position.needsUpdate = true;
+                geometry.computeVertexNormals();
+
+                // Update terrain color based on mid frequencies
+                const hue = this.midLevel * 0.8 + 0.5; // Shift through spectrum
+                this.terrain.material.color.setHSL(hue, 0.8, 0.5 + this.overallLevel * 0.3);
+            }
+
+            updateCamera() {
+                if (!this.camera) return;
+
+                // Gentle camera movement based on audio
+                const time = Date.now() * 0.0005;
+                
+                this.camera.position.x = Math.sin(time + this.bassLevel * 2) * 30;
+                this.camera.position.y = 50 + this.overallLevel * 20;
+                this.camera.position.z = 100 + Math.cos(time) * 20;
+                
+                this.camera.lookAt(0, this.midLevel * 10, 0);
+            }
+
+            animate() {
+                this.animationId = requestAnimationFrame(() => this.animate());
+
+                if (this.isPlaying) {
+                    this.processAudioData();
+                    this.updateTerrain();
+                    this.updateCamera();
+                }
+
+                this.renderer.render(this.scene, this.camera);
+            }
+
+            async start() {
+                if (this.isPlaying) return;
+
+                const audioInitialized = await this.setupAudio();
+                if (!audioInitialized) return;
+
+                this.isPlaying = true;
+                document.getElementById('startBtn').disabled = true;
+                document.getElementById('pauseBtn').disabled = false;
+                this.updateStatus('🎵 Vibing with your audio');
+
+                console.log('🚀 VibeScape started');
+            }
+
+            pause() {
+                this.isPlaying = false;
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('pauseBtn').disabled = true;
+                this.updateStatus('⏸ Paused - ready to resume');
+
+                console.log('⏸ VibeScape paused');
+            }
+
+            updateStatus(message) {
+                document.getElementById('status').textContent = message;
+            }
+
+            setupEventListeners() {
+                document.getElementById('startBtn').addEventListener('click', () => this.start());
+                document.getElementById('pauseBtn').addEventListener('click', () => this.pause());
+            }
+        }
+
+        // Initialize VibeScape when page loads
+        window.addEventListener('load', () => {
+            console.log('🎵 Welcome to VibeScape - Where Music Becomes Reality');
+            new VibeScape();
+        });
+    </script>
+</body>
+</html>
