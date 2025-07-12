@@ -233,22 +233,30 @@
             }
 
             createBasicScene() {
-                // Basic lighting to start
-                const ambientLight = new THREE.AmbientLight(0x404040, 0.4);
-                this.scene.add(ambientLight);
+                // Enhanced atmospheric lighting
+                this.ambientLight = new THREE.AmbientLight(0x404040, 0.3);
+                this.scene.add(this.ambientLight);
 
-                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-                directionalLight.position.set(50, 50, 50);
-                directionalLight.castShadow = true;
-                this.scene.add(directionalLight);
+                this.directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
+                this.directionalLight.position.set(50, 50, 50);
+                this.directionalLight.castShadow = true;
+                this.scene.add(this.directionalLight);
 
-                // Create a simple plane to start - we'll make it reactive soon
+                // Add atmospheric fog for depth
+                this.scene.fog = new THREE.Fog(0x0a0a0f, 200, 800);
+
+                // Create background stars
+                this.createStarField();
+
+                // Create enhanced terrain with better materials
                 const geometry = new THREE.PlaneGeometry(200, 200, 50, 50);
                 const material = new THREE.MeshPhongMaterial({ 
                     color: 0x4a90e2,
                     wireframe: false,
                     transparent: true,
-                    opacity: 0.8
+                    opacity: 0.8,
+                    shininess: 30,
+                    specular: 0x111111
                 });
                 
                 this.terrain = new THREE.Mesh(geometry, material);
@@ -324,6 +332,49 @@
                 this.scene.add(this.sparkles);
 
                 console.log('✨ Particle systems created');
+            }
+
+            createStarField() {
+                // Create distant stars for atmosphere
+                const starCount = 2000;
+                const starPositions = new Float32Array(starCount * 3);
+                const starColors = new Float32Array(starCount * 3);
+                
+                for (let i = 0; i < starCount; i++) {
+                    const i3 = i * 3;
+                    
+                    // Random positions in a large sphere
+                    const radius = 800 + Math.random() * 400;
+                    const theta = Math.random() * Math.PI * 2;
+                    const phi = Math.random() * Math.PI;
+                    
+                    starPositions[i3] = radius * Math.sin(phi) * Math.cos(theta);
+                    starPositions[i3 + 1] = Math.max(0, radius * Math.cos(phi)); // Keep stars above ground
+                    starPositions[i3 + 2] = radius * Math.sin(phi) * Math.sin(theta);
+                    
+                    // Subtle color variation
+                    const warmth = Math.random();
+                    starColors[i3] = 0.8 + warmth * 0.2;
+                    starColors[i3 + 1] = 0.8 + warmth * 0.1;
+                    starColors[i3 + 2] = 0.9 - warmth * 0.1;
+                }
+
+                const starGeometry = new THREE.BufferGeometry();
+                starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+                starGeometry.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
+
+                const starMaterial = new THREE.PointsMaterial({
+                    size: 1.5,
+                    vertexColors: true,
+                    transparent: true,
+                    opacity: 0.8,
+                    sizeAttenuation: true
+                });
+
+                this.stars = new THREE.Points(starGeometry, starMaterial);
+                this.scene.add(this.stars);
+
+                console.log('⭐ Star field created');
             }
 
             async setupAudio() {
@@ -501,6 +552,44 @@
                 this.sparkles.material.opacity = 0.4 + this.highLevel * 0.6;
             }
 
+            updateLighting() {
+                if (!this.ambientLight || !this.directionalLight) return;
+
+                const time = Date.now() * 0.001;
+
+                // Ambient light responds to overall audio level
+                this.ambientLight.intensity = 0.2 + this.overallLevel * 0.4;
+                
+                // Ambient light color shifts with mid frequencies
+                const ambientHue = this.midLevel * 0.8 + 0.15;
+                this.ambientLight.color.setHSL(ambientHue, 0.5, 0.5);
+
+                // Directional light intensity pulses with bass
+                this.directionalLight.intensity = 0.4 + this.bassLevel * 0.6;
+                
+                // Directional light color responds to high frequencies
+                const dirHue = this.highLevel * 0.6 + 0.6;
+                this.directionalLight.color.setHSL(dirHue, 0.7, 0.8);
+
+                // Move directional light position slightly with audio
+                this.directionalLight.position.x = 50 + Math.sin(time + this.bassLevel * 3) * 20;
+                this.directionalLight.position.z = 50 + Math.cos(time + this.midLevel * 2) * 20;
+
+                // Update fog color to match atmosphere
+                const fogHue = (this.midLevel * 0.4 + this.highLevel * 0.2 + time * 0.05) % 1;
+                this.scene.fog.color.setHSL(fogHue, 0.3, 0.05 + this.overallLevel * 0.05);
+
+                // Update background color to match mood
+                const bgHue = (this.overallLevel * 0.3 + time * 0.03) % 1;
+                this.scene.background.setHSL(bgHue, 0.4, 0.02 + this.overallLevel * 0.03);
+
+                // Stars twinkle with high frequencies
+                if (this.stars) {
+                    this.stars.material.opacity = 0.6 + this.highLevel * 0.4;
+                    this.stars.rotation.y += 0.0001 + this.overallLevel * 0.0005;
+                }
+            }
+
             animate() {
                 this.animationId = requestAnimationFrame(() => this.animate());
 
@@ -508,6 +597,7 @@
                     this.processAudioData();
                     this.updateTerrain();
                     this.updateParticles();
+                    this.updateLighting();
                     this.updateCamera();
                 }
 
